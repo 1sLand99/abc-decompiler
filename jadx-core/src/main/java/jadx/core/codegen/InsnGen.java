@@ -184,12 +184,12 @@ public class InsnGen {
 	}
 
 	public void declareVar(ICodeWriter code, CodeVar codeVar) {
-		if (codeVar.isFinal()) {
-			code.add("final ");
-		}
-		if (useType(code, codeVar.getType())) {
-			code.add(' ');
-		}
+//		if (codeVar.isFinal()) {
+//			code.add("final ");
+//		}
+//		if (useType(code, codeVar.getType())) {
+//			code.add(' ');
+//		}
 		defVar(code, codeVar);
 	}
 

@@ -196,6 +196,18 @@ public class InsnDecoder {
 				return insn(InsnType.MOVE, InsnArg.reg(accRegister, ArgType.NARROW),
 						getRegisterArg(asmItem, 1, ArgType.NARROW));
 
+			case 0x58:
+			case 0x5a:{
+				InsnArg arg = InsnArg.wrapArg(new ConstClassNode(ArgType.object("undefined")));
+				return new IfNode(getIntOpUnit(asmItem, 1) + asmItem.getCodeOffset(), InsnArg.reg(accRegister, ArgType.NARROW), arg, IfOp.EQ);
+			}
+
+			case 0x59:
+			case 0x5b:{
+				InsnArg arg = InsnArg.wrapArg(new ConstClassNode(ArgType.object("undefined")));
+				return new IfNode(getIntOpUnit(asmItem, 1) + asmItem.getCodeOffset(), InsnArg.reg(accRegister, ArgType.NARROW), arg, IfOp.NE);
+			}
+
 			case 0x13:
 				return cmp(getRegisterByOpIndex(asmItem, 2), accRegister, accRegister, InsnType.CMP_G, ArgType.NARROW);
 
@@ -593,6 +605,7 @@ public class InsnDecoder {
 						InsnArg.reg(accRegister, ArgType.OBJECT), InsnArg.reg(accRegister, ArgType.OBJECT));
 
 			case 0xdb:
+			case 0xdc:
 				return makePutField(asmItem, getRegisterByOpIndex(asmItem, 3), accRegister, 2);
 
 			case 0xd6:
@@ -930,6 +943,40 @@ public class InsnDecoder {
 
 				}
 
+				case 0x0c:
+				case 0x0b: {
+					return newsendableenv(insn, asmItem, accRegister);
+				}
+
+				case 0x0d:
+				case 0x0e:
+				case 0x0f: {
+					return stsendablevar(insn, asmItem, accRegister);
+				}
+
+				case 0x10:
+				case 0x12:
+				case 0x11: {
+					return ldsendablevar(insn, asmItem, accRegister);
+				}
+
+				case 0x14:
+				case 0x13: {
+					MethodInfo mthInfo = MethodInfo.fromAsm(root, insn.getAsmItem(), 1, nOp == 0x14 ? "isfalse" : "istrue");
+					InvokeNode invoke = new InvokeNode(mthInfo, InvokeType.STATIC, 1);
+					invoke.addReg(accRegister, ArgType.INT);
+					invoke.setResult(InsnArg.reg(accRegister, ArgType.INT));
+					return invoke;
+				}
+
+
+				case 0x0a:
+				case 0x15:
+				case 0x16:
+				case 0x17:
+				case 0x18:
+					return ldexternalmodulevar(insn, asmItem, accRegister, true);
+
 				case 0x07: {
 					List<InstFmt> formats = asmItem.getIns().getFormat();
 					MethodItem targetMth = ((InstFmt.MId) formats.get(3)).getMethod(asmItem);
@@ -995,6 +1042,41 @@ public class InsnDecoder {
 		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(getIntOpUnit(asmItem, slotIndex))));
 		return invoke;
 	}
+
+	private @NotNull InvokeNode ldsendablevar(InsnData insn, Asm.AsmItem asmItem, int accRegister) {
+		MethodInfo mthInfo = MethodInfo.fromAsm(root, insn.getAsmItem(), 2, "ldsendablevar");
+		int slotIndex = 2;
+		int a = asmItem.getOpUnits().get(slotIndex).intValue();
+		int b = asmItem.getOpUnits().get(slotIndex + 3).intValue();
+
+		InvokeNode invoke = new InvokeNode(mthInfo, InvokeType.STATIC, 2);
+		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(a)));
+		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(b)));
+		invoke.setResult(InsnArg.reg(accRegister, ArgType.NARROW));
+		return invoke;
+	}
+
+	private @NotNull InvokeNode stsendablevar(InsnData insn, Asm.AsmItem asmItem, int accRegister) {
+		MethodInfo mthInfo = MethodInfo.fromAsm(root, insn.getAsmItem(), 3, "stsendablevar");
+		InvokeNode invoke = new InvokeNode(mthInfo, InvokeType.STATIC, 3);
+		int slotIndex = 2;
+		int a = asmItem.getOpUnits().get(slotIndex).intValue();
+		int b = asmItem.getOpUnits().get(slotIndex + 3).intValue();
+		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(a)));
+		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(b)));
+		invoke.addArg(InsnArg.reg(accRegister, ArgType.NARROW));
+		return invoke;
+	}
+
+	private @NotNull InvokeNode newsendableenv(InsnData insn, Asm.AsmItem asmItem, int accRegister) {
+		MethodInfo mthInfo = MethodInfo.fromAsm(root, insn.getAsmItem(), 1, "newsendableenv");
+		InvokeNode invoke = new InvokeNode(mthInfo, InvokeType.STATIC, 1);
+		int slotIndex = 2;
+		int a = asmItem.getOpUnits().get(slotIndex).intValue();
+		invoke.addArg(InsnArg.wrapArg(new ConstIntNode(a)));
+		return invoke;
+	}
+
 
 	private @NotNull InvokeNode stownbyindex(InsnData insn, Asm.AsmItem asmItem, int accRegister) {
 		MethodInfo mthInfo = MethodInfo.fromAsm(root, insn.getAsmItem(), 3, "stownbyindex");
@@ -1191,6 +1273,14 @@ public class InsnDecoder {
 		inode.setResult(InsnArg.reg(insn, 0, ArgType.INT));
 		inode.addArg(InsnArg.reg(insn, 1, argType));
 		inode.addArg(InsnArg.reg(insn, 2, argType));
+		return inode;
+	}
+
+	private InsnNode cmp(int a1, InsnArg a2, int resultRegister, InsnType itype, ArgType argType) {
+		InsnNode inode = new InsnNode(itype, 2);
+		inode.setResult(InsnArg.reg(resultRegister, ArgType.INT));
+		inode.addArg(InsnArg.reg(a1, argType));
+		inode.addArg(a2);
 		return inode;
 	}
 
